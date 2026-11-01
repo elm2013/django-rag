@@ -1,7 +1,7 @@
 # Django RAG
 
 A modular starter project for Retrieval-Augmented Generation (RAG) with Django,
-ChromaDB, local Sentence Transformers embeddings, and an OpenAI-compatible LLM API.
+ChromaDB, local Sentence Transformers embeddings, and an OpenAI-compatible LLM provider. The chat interface uses WebSockets.
 
 ## Requirements
 
@@ -36,13 +36,27 @@ python manage.py ingest_docs
 python manage.py runserver
 ```
 
-Ask a question:
+Connect to the chat WebSocket at `ws://127.0.0.1:8000/ws/rag/chat/`.
 
-```bash
-curl -X POST http://127.0.0.1:8000/api/ask/ \
-  -H 'Content-Type: application/json' \
-  -d '{"question":"What does the document say about access control?"}'
+Send a JSON message:
+
+```json
+{"type": "ask", "question": "What does the document say about access control?"}
 ```
+
+A successful response has this structure:
+
+```json
+{
+  "type": "answer",
+  "answer": "...",
+  "sources": [
+    {"id": 1, "source": "access_control.md", "distance": 0.2}
+  ]
+}
+```
+
+Invalid requests and handled service errors are returned as `error` messages.
 
 ## Project layout
 
@@ -52,7 +66,7 @@ curl -X POST http://127.0.0.1:8000/api/ask/ \
 - `retrieval/`: similarity search
 - `llm/`: LLM client and grounded answer generation
 - `application/`: coordinates retrieval and answer generation
-- `api/`: HTTP endpoint
+- `websocket/`: WebSocket routing and chat consumer
 - `models.py`: document indexing metadata
 
 ## Current indexing behavior
@@ -66,15 +80,15 @@ reduces the risk of losing the previous indexed revision when an update fails.
 
 ## Important
 
-- The API endpoint is intentionally protected with Django's normal CSRF behavior.
-  For local testing with `curl`, use a proper authenticated client or add an
-  explicit development-only CSRF strategy. Do not expose an unauthenticated
-  endpoint publicly.
+- WebSocket connections are checked with `AllowedHostsOriginValidator` and
+  use Django session authentication middleware. Add explicit authorization
+  checks before exposing private document collections.
 - Retrieved document text is sent to the configured LLM provider. Do not index
   confidential material unless that provider and data flow are approved.
 - ChromaDB and the embedding model are initialized lazily and cached per process.
-- For production, add authentication, authorization, rate limiting, logging,
-  tests, and a background worker if indexing latency requires it.
+- For production, configure a Redis channel layer when running multiple ASGI
+  processes, and add authorization, rate limiting, logging, monitoring, and a
+  background worker if question-answering latency requires it.
 
 
 ## Incremental indexing behavior
